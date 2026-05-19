@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Story: Dashboard Kebencanaan BPS</title>
+    
+    <!-- Google Fonts: DM Sans, DM Mono, Georgia/Lora -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"DM Sans"', 'sans-serif'],
+                        serif: ['Georgia', 'Lora', 'serif'],
+                        mono: ['"DM Mono"', 'monospace'],
+                    },
+                    colors: {
+                        slate: { 850: '#0f172a', 900: '#0f1629', 950: '#030712' },
+                        primary: '#0ea5e9',
+                        rain: '#a855f7',
+                        quake: '#f97316'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #030712; color: #f1f5f9; overflow: hidden; }
+        
+        /* Map Layer */
+        #map { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+        
+        /* Scrollytelling Layer */
+        #story-wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; z-index: 10; overflow-y: auto; scroll-behavior: smooth; transition: opacity 0.5s ease; }
+        #story-wrapper::-webkit-scrollbar { display: none; } /* Hide scrollbar */
+        #story-wrapper { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Story Steps */
+        .step { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; position: relative; pointer-events: none; padding: 2rem 5%; }
+        .step > div { pointer-events: auto; transition: all 0.7s ease; opacity: 0.3; transform: translateY(20px); }
+        .step.is-active > div { opacity: 1; transform: translateY(0); }
+        
+        /* Glassmorphism Classes (Matched with Style Guide) */
+        .glass-card { background: rgba(15, 22, 41, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(30, 58, 95, 0.6); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        
+        /* Dashboard UI Layer */
+        #dashboard-ui { position: fixed; inset: 0; z-index: 20; pointer-events: none; opacity: 0; transition: opacity 0.5s ease; display: flex; flex-direction: column; justify-content: space-between; padding: 1.5rem; }
+        #dashboard-ui.active { opacity: 1; pointer-events: auto; }
+
+        /* Leaflet Customizations for Dark Theme */
+        .leaflet-control-zoom { border: none !important; box-shadow: 0 10px 25px rgba(0,0,0,0.5) !important; margin-right: 1.5rem !important; margin-top: 5rem !important; }
+        .leaflet-control-zoom a { background-color: rgba(15, 22, 41, 0.9) !important; color: #94a3b8 !important; border: 1px solid #1e3a5f !important; }
+        .leaflet-control-zoom a:hover { color: #fff !important; background-color: rgba(30, 58, 95, 0.9) !important; }
+        .leaflet-container .leaflet-control-attribution { background: rgba(3, 7, 18, 0.7); color: #64748b; font-family: "DM Mono", monospace; font-size: 10px; }
+        
+        /* SVG Glow Effects */
+        .glow-rain { filter: drop-shadow(0 0 25px rgba(168, 85, 247, 0.6)); }
+        .glow-flood { filter: drop-shadow(0 0 15px rgba(14, 165, 233, 0.7)); }
+        .glow-quake { filter: drop-shadow(0 0 15px rgba(249, 115, 22, 0.8)); }
+
+        /* Custom Checkbox */
+        .layer-toggle input:checked + div { border-color: currentColor; background-color: currentColor; }
+        
+        /* Timeline Nodes */
+        .timeline-node { cursor: pointer; transition: all 0.3s ease; }
+        .timeline-node:hover .node-dot { transform: scale(1.5); }
+        .timeline-node.active .node-dot { transform: scale(1.8); background-color: #0ea5e9; border-color: #030712; border-width: 3px; box-shadow: 0 0 15px rgba(14,165,233,0.8); }
+        .timeline-node.active .node-label { color: #0ea5e9; font-weight: 700; transform: scale(1.1); }
+    </style>
+</head>
+<body>
+
+    <!-- 1. HEADER BPS -->
+    <header class="fixed top-0 left-0 w-full h-16 bg-[#030712]/90 backdrop-blur-md border-b border-[#1e3a5f]/80 z-30 flex items-center justify-between px-6 md:px-10 shadow-lg">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-serif font-bold text-white shadow-[0_0_15px_rgba(37,99,235,0.6)]">B</div>
+            <div>
+                <h1 class="font-sans font-bold text-sm tracking-wide text-white">Dashboard Kebencanaan <span class="font-normal text-slate-400 hidden sm:inline">| BPS & STIS</span></h1>
+            </div>
+        </div>
+        <div class="flex items-center gap-6">
+            <span class="font-mono text-xs text-slate-400 tracking-widest hidden md:block hover:text-white cursor-pointer transition">TENTANG</span>
+            <span class="font-mono text-xs text-slate-400 tracking-widest hidden md:block hover:text-white cursor-pointer transition">METODE</span>
+            <div class="px-4 py-1.5 bg-blue-700 text-white font-sans font-semibold text-xs rounded-full shadow-lg">Modul 7 / 12</div>
+        </div>
+        <div id="progress-bar" class="absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-sky-400 to-blue-600 w-0 transition-all duration-100"></div>
+    </header>
+
+    <!-- 2. LEAFLET MAP CONTAINER -->
+    <div id="map"></div>
+
+    <!-- 3. SCROLLYTELLING CONTENT -->
+    <div id="story-wrapper">
+        
+        <!-- STEP 1: INTRO -->
+        <section class="step" id="step-intro" data-scene="intro">
+            <div class="max-w-4xl mx-auto glass-card p-10 md:p-16 rounded-[2rem] text-center mt-16 border-t-4 border-t-blue-500">
+                <div class="inline-flex items-center px-4 py-1.5 bg-[#0a0f1e] rounded-full border border-slate-700 mb-6 shadow-inner">
+                    <div class="w-2 h-2 rounded-full bg-blue-500 mr-2 animate-pulse"></div>
+                    <span class="font-mono text-[10px] text-blue-400 tracking-[0.2em]">ANALISIS SPASIAL BENCANA</span>
+                </div>
+                <h2 class="font-serif font-black text-5xl md:text-6xl text-white mb-6 leading-tight">Menelusuri Jejak <br/>Bencana dari Angkasa</h2>
+                <p class="font-sans text-lg text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed">Banjir pesisir barat Sumatera dianalisis dari orbit. Menelusuri rantai peristiwa mulai dari anomali curah hujan dan aktivitas seismik, hingga fase genangan puncak dan awal pemulihan.</p>
+                
+                <div class="flex flex-wrap justify-center gap-4 mb-12">
+                    <div class="px-4 py-2 bg-[#0a0f1e] border border-[#1e3a5f] rounded-xl">
+                        <div class="font-mono text-[9px] text-slate-500 mb-1 tracking-widest">SUMBER DATA</div>
+                        <div class="font-sans font-bold text-sm text-sky-400">Sentinel-1 SAR</div>
+                    </div>
+                    <div class="px-4 py-2 bg-[#0a0f1e] border border-[#1e3a5f] rounded-xl">
+                        <div class="font-mono text-[9px] text-slate-500 mb-1 tracking-widest">SUMBER DATA</div>
+                        <div class="font-sans font-bold text-sm text-purple-400">NASA GPM</div>
+                    </div>
+                    <div class="px-4 py-2 bg-[#0a0f1e] border border-[#1e3a5f] rounded-xl">
+                        <div class="font-mono text-[9px] text-slate-500 mb-1 tracking-widest">SUMBER DATA</div>
+                        <div class="font-sans font-bold text-sm text-orange-400">BMKG RI</div>
+                    </div>
+                </div>
+
+                <div class="animate-bounce flex flex-col items-center gap-2 opacity-80 mt-4">
+                    <span class="font-mono text-[10px] tracking-[0.2em] text-slate-400">SCROLL KE BAWAH</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 2: CAUSALITY (PEMICU) -->
+        <section class="step items-start" id="step-pemicu" data-scene="pemicu">
+            <div class="max-w-md glass-card p-8 md:p-10 rounded-3xl relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-purple-500 to-orange-500"></div>
+                
+                <div class="inline-flex items-center px-3 py-1 bg-[#1a0e3a] border border-purple-600/50 rounded-full mb-6">
+                    <span class="font-mono text-[10px] text-purple-300 tracking-wider">FASE PRA-BENCANA</span>
+                </div>
+                
+                <h3 class="font-serif font-black text-4xl text-white mb-6 leading-tight">Anomali Cuaca &<br/>Tanah Goyah</h3>
+                
+                <p class="font-sans text-[15px] text-slate-300 leading-relaxed mb-4">Area <span class="text-purple-400 font-bold">berwarna ungu</span> pada peta menunjukkan anomali curah hujan ekstrem yang direkam satelit GPM selama tiga hari berturut-turut.</p>
+                <p class="font-sans text-[15px] text-slate-300 leading-relaxed mb-8">Di saat bersamaan, rentetan gempa tektonik <span class="text-orange-400 font-bold">(titik oranye)</span> meretakkan lapisan batuan, membuat lereng perbukitan yang jenuh air menjadi sangat rentan longsor.</p>
+
+                <!-- Mini Stats Box -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-[#0a0f1e] p-4 rounded-xl border border-slate-700/50">
+                        <div class="font-mono text-[9px] text-slate-400 tracking-widest mb-1">CURAH HUJAN MAX</div>
+                        <div class="font-serif font-black text-3xl text-purple-400">247 <span class="font-sans font-normal text-xs text-slate-500">mm/h</span></div>
+                    </div>
+                    <div class="bg-[#0a0f1e] p-4 rounded-xl border border-slate-700/50">
+                        <div class="font-mono text-[9px] text-slate-400 tracking-widest mb-1">GEMPA (72 JAM)</div>
+                        <div class="font-serif font-black text-3xl text-orange-400">23 <span class="font-sans font-normal text-xs text-slate-500">kali</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 3: PEAK FLOOD (PUNCAK) -->
+        <section class="step items-end" id="step-puncak" data-scene="puncak">
+            <div class="max-w-md glass-card p-8 md:p-10 rounded-3xl relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-sky-400 to-blue-600"></div>
+                
+                <div class="inline-flex items-center px-3 py-1 bg-[#061628] border border-sky-500/50 rounded-full mb-6">
+                    <div class="w-1.5 h-1.5 bg-sky-400 rounded-full mr-2 animate-pulse"></div>
+                    <span class="font-mono text-[10px] text-sky-300 tracking-wider">FASE KRITIS (T+2)</span>
+                </div>
+                
+                <h3 class="font-serif font-black text-4xl text-white mb-6 leading-tight">Daya Rusak<br/>Maksimal</h3>
+                
+                <p class="font-sans text-[15px] text-slate-300 leading-relaxed mb-8">Warna <span class="text-sky-400 font-bold">biru terang</span> pada peta merupakan area yang terdeteksi tergenang air oleh sensor SAR Sentinel-1. Hamparan genangan mencapai luas maksimumnya, melumpuhkan seluruh aktivitas pesisir.</p>
+
+                <div class="bg-[#0a0f1e] p-5 rounded-xl border border-slate-700/50 flex flex-col gap-4">
+                    <div class="flex justify-between items-end border-b border-slate-700/50 pb-3">
+                        <div class="font-mono text-[10px] text-slate-400 tracking-widest">LUAS TERDAMPAK</div>
+                        <div class="font-serif font-bold text-2xl text-sky-400">1.245 <span class="font-sans font-normal text-xs text-slate-500">Ha</span></div>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <div class="font-mono text-[10px] text-slate-400 tracking-widest">KEDALAMAN MAX</div>
+                        <div class="font-serif font-bold text-2xl text-sky-400">2.8 <span class="font-sans font-normal text-xs text-slate-500">Meter</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 4: TRIGGER DASHBOARD -->
+        <section class="step items-center" id="step-dashboard-trigger" data-scene="dashboard_trigger" style="min-height: 80vh;">
+            <div class="max-w-xl glass-card p-12 rounded-[2rem] text-center shadow-[0_0_50px_rgba(14,165,233,0.1)]">
+                <h3 class="font-serif font-black text-3xl text-white mb-4">Waktunya Anda Bereksplorasi</h3>
+                <p class="font-sans text-slate-300 mb-8">Cerita kronologi telah usai. Sekarang, ambil kendali penuh atas peta. Nyalakan layer data, geser waktu (timeline), dan temukan wawasan spasial Anda sendiri.</p>
+                <button onclick="enterDashboardMode()" class="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-sans font-bold rounded-full transition-all shadow-[0_10px_20px_rgba(37,99,235,0.4)] hover:shadow-[0_10px_25px_rgba(37,99,235,0.6)] transform hover:-translate-y-1">
+                    Masuk Mode Explorer ➔
+                </button>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- 4. DASHBOARD / GIS EXPLORER UI (Fullscreen Overlay) -->
+    <div id="dashboard-ui">
+        
+        <!-- Header Dashboard -->
+        <div class="flex justify-between items-start pt-16">
+            <!-- Left Panel: Layer Manager -->
+            <div class="w-80 glass-card rounded-2xl p-6 hidden md:block">
+                <h2 class="font-serif font-bold text-2xl text-white mb-1">Explorer Spasial</h2>
+                <p class="font-sans text-xs text-slate-400 mb-5 border-b border-slate-700/50 pb-4">Kombinasikan layer untuk analisis korelasi.</p>
+                
+                <div class="space-y-3">
+                    <label class="layer-toggle flex items-center p-3 rounded-xl bg-[#1a0e3a] border border-purple-600/50 cursor-pointer hover:bg-purple-900/40 transition">
+                        <input type="checkbox" id="toggle-rain" checked class="hidden" onchange="toggleLayer(this, rainLayerGroup)">
+                        <div class="w-5 h-5 rounded border-2 border-purple-500 flex items-center justify-center text-transparent mr-3 transition-colors">
+                            <svg class="w-3 h-3" fill="none" stroke="white" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg>
+                        </div>
+                        <div>
+                            <div class="font-sans font-bold text-sm text-purple-200">Curah Hujan (GPM)</div>
+                            <div class="font-mono text-[10px] text-purple-400">Anomali Intensitas</div>
+                        </div>
+                    </label>
+                    
+                    <label class="layer-toggle flex items-center p-3 rounded-xl bg-[#2c1006] border border-orange-600/50 cursor-pointer hover:bg-orange-900/40 transition">
+                        <input type="checkbox" id="toggle-quake" checked class="hidden" onchange="toggleLayer(this, quakeLayerGroup)">
+                        <div class="w-5 h-5 rounded border-2 border-orange-500 flex items-center justify-center text-transparent mr-3 transition-colors">
+                            <svg class="w-3 h-3" fill="none" stroke="white" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg>
+                        </div>
+                        <div>
+                            <div class="font-sans font-bold text-sm text-orange-200">Titik Gempa (BMKG)</div>
+                            <div class="font-mono text-[10px] text-orange-400">Episentrum Bencana</div>
+                        </div>
+                    </label>
+
+                    <label class="layer-toggle flex items-center p-3 rounded-xl bg-[#061628] border border-sky-500/50 cursor-pointer hover:bg-sky-900/40 transition">
+                        <input type="checkbox" id="toggle-flood" checked class="hidden" onchange="toggleLayer(this, currentFloodLayer)">
+                        <div class="w-5 h-5 rounded border-2 border-sky-500 flex items-center justify-center text-transparent mr-3 transition-colors">
+                            <svg class="w-3 h-3" fill="none" stroke="white" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg>
+                        </div>
+                        <div>
+                            <div class="font-sans font-bold text-sm text-sky-200">Genangan (SAR)</div>
+                            <div class="font-mono text-[10px] text-sky-400">Sebaran Air Banjir</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Right Button: Exit Dashboard -->
+            <button onclick="exitDashboardMode()" class="glass-card px-5 py-2.5 rounded-full flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800 transition shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                <span class="font-sans font-bold text-sm">Kembali ke Cerita</span>
+            </button>
+        </div>
+
+        <!-- Bottom Panel: Interactive Timeline -->
+        <div class="w-full max-w-5xl mx-auto glass-card rounded-2xl p-5 px-6 md:px-10 relative">
+            <div class="font-mono text-[10px] text-slate-400 tracking-widest mb-5 font-bold">KRONOLOGI WAKTU BENCANA (KLIK TANGGAL)</div>
+            
+            <div class="flex items-center gap-4 md:gap-8">
+                <div class="flex-1 relative h-12 flex flex-col justify-center">
+                    <!-- Base Track -->
+                    <div class="absolute w-full h-1.5 bg-slate-800 rounded-full"></div>
+                    <!-- Active Progress Track -->
+                    <div id="timeline-progress" class="absolute w-[50%] h-1.5 bg-sky-500 rounded-full transition-all duration-500"></div>
+                    
+                    <!-- Clickable Nodes -->
+                    <div class="absolute w-full flex justify-between px-1 -mt-1 z-10">
+                        
+                        <!-- 10 Okt -->
+                        <div class="timeline-node active flex flex-col items-center gap-2" onclick="changeTimelineDate(0)" data-index="0">
+                            <div class="node-dot w-4 h-4 bg-sky-500 border-2 border-[#030712] rounded-full"></div>
+                            <span class="node-label font-mono text-[11px] text-sky-400 mt-1">10 Okt</span>
+                        </div>
+                        
+                        <!-- 12 Okt -->
+                        <div class="timeline-node flex flex-col items-center gap-2" onclick="changeTimelineDate(1)" data-index="1">
+                            <div class="node-dot w-4 h-4 bg-slate-600 border-2 border-[#030712] rounded-full"></div>
+                            <span class="node-label font-mono text-[11px] text-slate-500 mt-1">12 Okt</span>
+                        </div>
+                        
+                        <!-- 15 Okt (Puncak) -->
+                        <div class="timeline-node flex flex-col items-center gap-2 relative" onclick="changeTimelineDate(2)" data-index="2">
+                            <div class="absolute -top-7 bg-red-500/20 text-red-400 border border-red-500/50 text-[9px] font-bold px-2 py-0.5 rounded font-sans whitespace-nowrap">PUNCAK</div>
+                            <div class="node-dot w-4 h-4 bg-slate-600 border-2 border-[#030712] rounded-full"></div>
+                            <span class="node-label font-mono text-[11px] text-slate-500 mt-1">15 Okt</span>
+                        </div>
+                        
+                        <!-- 18 Okt -->
+                        <div class="timeline-node flex flex-col items-center gap-2" onclick="changeTimelineDate(3)" data-index="3">
+                            <div class="node-dot w-4 h-4 bg-slate-600 border-2 border-[#030712] rounded-full"></div>
+                            <span class="node-label font-mono text-[11px] text-slate-500 mt-1">18 Okt</span>
+                        </div>
+                        
+                        <!-- 22 Okt (Surut) -->
+                        <div class="timeline-node flex flex-col items-center gap-2 relative" onclick="changeTimelineDate(4)" data-index="4">
+                            <div class="absolute -top-7 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 text-[9px] font-bold px-2 py-0.5 rounded font-sans whitespace-nowrap">SURUT</div>
+                            <div class="node-dot w-4 h-4 bg-slate-600 border-2 border-[#030712] rounded-full"></div>
+                            <span class="node-label font-mono text-[11px] text-slate-500 mt-1">22 Okt</span>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        // ==========================================
+        // 1. INISIALISASI PETA (LEAFLET)
+        // ==========================================
+        const centerSumatera = [-0.9471, 100.3658]; 
+        const map = L.map('map', {
+            center: [0.0, 102.0], // Default zoom out
+            zoom: 6,
+            zoomControl: false,
+            scrollWheelZoom: false,
+            dragging: false,
+            doubleClickZoom: false
+        });
+
+        // Basemap: CartoDB Dark Matter
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a> | BPS-STIS Modul 7',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        // ==========================================
+        // 2. PEMBUATAN DATA LAYER (DUMMY SPASIAL)
+        // ==========================================
+        
+        // --- Layer Hujan (GPM) ---
+        const rainLayerGroup = L.layerGroup();
+        L.circle([-0.9, 100.4], { radius: 45000, color: '#9333ea', fillColor: '#a855f7', fillOpacity: 0.3, weight: 0, className: 'glow-rain' }).addTo(rainLayerGroup);
+        L.circle([-1.2, 100.6], { radius: 30000, color: '#9333ea', fillColor: '#c026d3', fillOpacity: 0.2, weight: 0, className: 'glow-rain' }).addTo(rainLayerGroup);
+
+        // --- Layer Gempa (BMKG) ---
+        const quakeLayerGroup = L.layerGroup();
+        const quakes = [
+            { lat: -0.85, lng: 100.25, mag: 5.8 }, { lat: -1.10, lng: 100.50, mag: 4.2 },
+            { lat: -0.70, lng: 100.45, mag: 3.5 }, { lat: -1.05, lng: 100.30, mag: 3.8 }
+        ];
+        quakes.forEach(q => {
+            const radius = q.mag * 3;
+            L.circleMarker([q.lat, q.lng], { radius: radius + 10, color: '#f97316', weight: 1, fillOpacity: 0.1, className: 'glow-quake' }).addTo(quakeLayerGroup);
+            L.circleMarker([q.lat, q.lng], { radius: 4, color: '#fff', weight: 1, fillColor: '#ea580c', fillOpacity: 1 }).addTo(quakeLayerGroup);
+        });
+
+        // --- Layer Banjir (Terbagi 3 Fase untuk Timeline Interaktif) ---
+        
+        // Fase 1: Awal (12 Okt) - Genangan Kecil
+        const floodPhase1 = L.layerGroup();
+        L.polygon([[[-0.93, 100.37], [-0.94, 100.39], [-0.96, 100.38]]], { color: '#0ea5e9', weight: 1, fillColor: '#2563eb', fillOpacity: 0.5, className: 'glow-flood' }).addTo(floodPhase1);
+
+        // Fase 2: Puncak (15 Okt) - Genangan Besar Luas
+        const floodPhase2 = L.layerGroup();
+        L.polygon([[[-0.92, 100.35], [-0.94, 100.38], [-0.98, 100.39], [-1.02, 100.38], [-1.05, 100.41], [-1.01, 100.43], [-0.96, 100.41], [-0.91, 100.38]]], { color: '#0ea5e9', weight: 1.5, fillColor: '#2563eb', fillOpacity: 0.6, className: 'glow-flood' }).addTo(floodPhase2);
+        L.polygon([[[-0.85, 100.32], [-0.88, 100.34], [-0.90, 100.33], [-0.87, 100.30]]], { color: '#0ea5e9', weight: 1, fillColor: '#2563eb', fillOpacity: 0.5 }).addTo(floodPhase2);
+
+        // Fase 3: Surut (22 Okt) - Sisa Genangan + Garis Batas Historis
+        const floodPhase3 = L.layerGroup();
+        // Sisa air sedikit
+        L.polygon([[[-0.95, 100.39], [-0.96, 100.40], [-0.98, 100.39]]], { color: '#0ea5e9', weight: 1, fillColor: '#2563eb', fillOpacity: 0.6 }).addTo(floodPhase3);
+        // Garis batas puncak terdahulu (Dotted line)
+        L.polyline([[-0.92, 100.35], [-0.94, 100.38], [-0.98, 100.39], [-1.02, 100.38], [-1.05, 100.41], [-1.01, 100.43], [-0.96, 100.41], [-0.91, 100.38], [-0.92, 100.35]], { color: '#64748b', weight: 1.5, dashArray: '5, 5', fill: false }).addTo(floodPhase3);
+
+        // Variabel penyimpan state layer banjir saat ini
+        let currentFloodLayer = floodPhase2; 
+
+
+        // ==========================================
+        // 3. LOGIKA SCROLLYTELLING (MODE CERITA)
+        // ==========================================
+        const storyWrapper = document.getElementById('story-wrapper');
+        const progressBar = document.getElementById('progress-bar');
+        
+        // Update Progress Bar
+        storyWrapper.addEventListener('scroll', () => {
+            const scrollTop = storyWrapper.scrollTop;
+            const scrollHeight = storyWrapper.scrollHeight - storyWrapper.clientHeight;
+            progressBar.style.width = ((scrollTop / scrollHeight) * 100) + '%';
+        });
+
+        // Definisi Aksi Peta per Kartu Cerita
+        const scenes = {
+            'intro': () => {
+                map.flyTo([0.0, 102.0], 6, { duration: 1.5 });
+                map.removeLayer(rainLayerGroup); map.removeLayer(quakeLayerGroup); map.removeLayer(floodPhase1); map.removeLayer(floodPhase2); map.removeLayer(floodPhase3);
+            },
+            'pemicu': () => {
+                map.flyTo(centerSumatera, 9, { duration: 2 });
+                setTimeout(() => { map.addLayer(rainLayerGroup); map.addLayer(quakeLayerGroup); }, 800);
+                map.removeLayer(floodPhase1); map.removeLayer(floodPhase2); map.removeLayer(floodPhase3);
+            },
+            'puncak': () => {
+                map.flyTo([-0.95, 100.38], 11, { duration: 2 });
+                map.removeLayer(rainLayerGroup); map.removeLayer(quakeLayerGroup);
+                setTimeout(() => { map.addLayer(floodPhase2); }, 500);
+            },
+            'dashboard_trigger': () => {
+                // Biarkan peta di posisi terakhir, siap untuk masuk dashboard
+            }
+        };
+
+        // Deteksi Elemen yang sedang dibaca menggunakan Intersection Observer
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // Beri class aktif ke card yang dibaca
+                    document.querySelectorAll('.step').forEach(el => el.classList.remove('is-active'));
+                    entry.target.classList.add('is-active');
+                    
+                    // Jalankan fungsi peta
+                    const sceneId = entry.target.getAttribute('data-scene');
+                    if (scenes[sceneId]) scenes[sceneId]();
+                }
+            });
+        }, { root: storyWrapper, rootMargin: '-30% 0px -40% 0px', threshold: 0 });
+
+        document.querySelectorAll('.step').forEach(step => observer.observe(step));
+
+
+        // ==========================================
+        // 4. LOGIKA DASHBOARD GIS (MODE EKSPLORASI)
+        // ==========================================
+        const dashboardUI = document.getElementById('dashboard-ui');
+        let isDashboardActive = false;
+
+        function enterDashboardMode() {
+            isDashboardActive = true;
+            // Sembunyikan layer cerita
+            storyWrapper.style.opacity = '0';
+            storyWrapper.style.pointerEvents = 'none';
+            
+            // Tampilkan UI Dashboard
+            dashboardUI.classList.add('active');
+            
+            // Buka gembok peta (Izinkan interaksi)
+            map.dragging.enable();
+            map.scrollWheelZoom.enable();
+            map.doubleClickZoom.enable();
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            // Set default view & layer untuk Dashboard (Fase Puncak)
+            map.flyTo([-0.95, 100.38], 10, { duration: 1 });
+            changeTimelineDate(2); // Set ke 15 Okt (Puncak) secara default
+            
+            // Sinkronisasi status Toggle Checkbox
+            document.getElementById('toggle-rain').checked = true;
+            document.getElementById('toggle-quake').checked = true;
+            document.getElementById('toggle-flood').checked = true;
+        }
+
+        function exitDashboardMode() {
+            isDashboardActive = false;
+            // Sembunyikan UI Dashboard
+            dashboardUI.classList.remove('active');
+            
+            // Kunci kembali peta
+            map.dragging.disable();
+            map.scrollWheelZoom.disable();
+            map.doubleClickZoom.disable();
+            const zoomCtrl = document.querySelector('.leaflet-control-zoom');
+            if(zoomCtrl) zoomCtrl.remove();
+
+            // Tampilkan layer cerita lagi
+            storyWrapper.style.opacity = '1';
+            storyWrapper.style.pointerEvents = 'auto';
+            
+            // Paksa scroll sedikit ke atas agar trigger animasi Intersection Observer jalan lagi
+            storyWrapper.scrollTop = storyWrapper.scrollTop - 100;
+        }
+
+        // Fungsi Toggle Layer (Merespon Checkbox Panel Kiri)
+        function toggleLayer(checkbox, layerGroup) {
+            // Khusus untuk layer banjir, referensinya dinamis tergantung timeline
+            let targetLayer = layerGroup;
+            if(checkbox.id === 'toggle-flood') { targetLayer = currentFloodLayer; }
+
+            if(checkbox.checked) {
+                if(!map.hasLayer(targetLayer)) map.addLayer(targetLayer);
+            } else {
+                if(map.hasLayer(targetLayer)) map.removeLayer(targetLayer);
+            }
+        }
+
+        // ==========================================
+        // 5. LOGIKA INTERAKTIF TIMELINE
+        // ==========================================
+        function changeTimelineDate(index) {
+            const nodes = document.querySelectorAll('.timeline-node');
+            const progress = document.getElementById('timeline-progress');
+            
+            // 1. Update UI Timeline Nodes & Garis Progress
+            nodes.forEach((node, i) => {
+                const dot = node.querySelector('.node-dot');
+                const label = node.querySelector('.node-label');
+                
+                if (i === index) {
+                    node.classList.add('active');
+                    dot.className = "node-dot w-4 h-4 bg-sky-500 border-2 border-[#030712] rounded-full";
+                    label.className = "node-label font-mono text-[11px] text-sky-400 mt-1";
+                } else if (i < index) {
+                    node.classList.remove('active');
+                    dot.className = "node-dot w-4 h-4 bg-sky-500 border-2 border-[#030712] rounded-full";
+                    label.className = "node-label font-mono text-[11px] text-sky-500/70 mt-1";
+                } else {
+                    node.classList.remove('active');
+                    dot.className = "node-dot w-4 h-4 bg-slate-600 border-2 border-[#030712] rounded-full";
+                    label.className = "node-label font-mono text-[11px] text-slate-500 mt-1";
+                }
+            });
+
+            // Update persentase lebar garis biru (progress)
+            const percentages = ['0%', '25%', '50%', '75%', '100%'];
+            progress.style.width = percentages[index];
+
+            // 2. Update Data di Peta (Hanya jika checkbox diizinkan menyala)
+            const showRain = document.getElementById('toggle-rain').checked;
+            const showQuake = document.getElementById('toggle-quake').checked;
+            const showFlood = document.getElementById('toggle-flood').checked;
+
+            // Bersihkan semua layer banjir terlebih dahulu
+            map.removeLayer(floodPhase1); map.removeLayer(floodPhase2); map.removeLayer(floodPhase3);
+
+            switch(index) {
+                case 0: // 10 Okt: Cuma Hujan & Gempa, Belum Banjir
+                    if(showRain) map.addLayer(rainLayerGroup);
+                    if(showQuake) map.addLayer(quakeLayerGroup);
+                    currentFloodLayer = L.layerGroup(); // Kosong
+                    break;
+                case 1: // 12 Okt: Hujan, Gempa, Banjir Awal
+                    if(showRain) map.addLayer(rainLayerGroup);
+                    if(showQuake) map.addLayer(quakeLayerGroup);
+                    currentFloodLayer = floodPhase1;
+                    if(showFlood) map.addLayer(currentFloodLayer);
+                    break;
+                case 2: // 15 Okt (Puncak): Hujan mulai reda, Banjir Maksimal
+                    map.removeLayer(rainLayerGroup); // Reda
+                    map.removeLayer(quakeLayerGroup); // Reda
+                    currentFloodLayer = floodPhase2;
+                    if(showFlood) map.addLayer(currentFloodLayer);
+                    break;
+                case 3: // 18 Okt: Banjir Berkurang sedikit
+                    map.removeLayer(rainLayerGroup); map.removeLayer(quakeLayerGroup);
+                    currentFloodLayer = floodPhase2; // Pakai yang sama untuk simplifikasi
+                    if(showFlood) map.addLayer(currentFloodLayer);
+                    break;
+                case 4: // 22 Okt (Surut): Sisa banjir & bekas puncak
+                    map.removeLayer(rainLayerGroup); map.removeLayer(quakeLayerGroup);
+                    currentFloodLayer = floodPhase3;
+                    if(showFlood) map.addLayer(currentFloodLayer);
+                    break;
+            }
+        }
+
+        // Mulai dengan scene intro
+        scenes['intro']();
+
+    </script>
+</body>
+</html>
